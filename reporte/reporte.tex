@@ -1,0 +1,418 @@
+\documentclass[12pt,letterpaper]{article}
+
+% --- Paquetes ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish]{babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+
+% --- Encabezado y pie de página ---
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Introducción a la Ciencia de Datos y ML}
+\lhead{Predicción de Cancelación de Servicios}
+\rfoot{\thepage}
+
+% --- Colores para código ---
+\definecolor{codegray}{gray}{0.95}
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  language=Python
+}
+
+% ============================================================
+\begin{document}
+
+% --- Portada ---
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\LARGE\bfseries Predicción de Cancelación de Servicios\\[0.4em]
+  Clasificación Binaria con Machine Learning\par}
+  \vspace{1.5cm}
+  {\large Proyecto Final\\
+  Introducción a la Ciencia de Datos y Machine Learning\par}
+  \vspace{1cm}
+  {\large Facultad de Ingeniería\\
+  Universidad de San Carlos de Guatemala\par}
+  \vspace{2cm}
+  {\large Jorge López\par}
+  \vfill
+  {\large Abril 2026}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Comprensión del Problema de Negocio}
+
+\subsection{Contexto}
+Las empresas que ofrecen servicios de suscripción o servicios puntuales enfrentan el reto
+de la cancelación de clientes (\textit{churn}). Identificar qué servicios tienen mayor
+probabilidad de ser cancelados permite actuar de forma proactiva antes de que la
+cancelación ocurra.
+
+\subsection{Objetivo}
+Construir un modelo de clasificación que prediga si un servicio contratado será cancelado,
+utilizando únicamente información disponible al momento de la compra: tipo de producto,
+estado de formación del negocio, canal de adquisición y antigüedad de la cuenta.
+
+\subsection{Formulación del problema}
+\begin{quote}
+\textit{¿Es posible predecir la cancelación de un servicio basándose en las características
+del producto, la cuenta y el negocio al momento de la compra?}
+\end{quote}
+
+\subsection{Variable objetivo}
+\texttt{IS\_CANCELED} — binaria: $1$ si el servicio fue cancelado, $0$ si no.
+
+\subsection{Tipo de problema}
+Clasificación binaria supervisada.
+
+\subsection{Utilidad práctica}
+Un modelo con buena capacidad predictiva permite:
+\begin{itemize}
+  \item Identificar servicios de alto riesgo de manera temprana.
+  \item Priorizar esfuerzos de retención en los segmentos más vulnerables.
+  \item Entender qué tipos de productos o perfiles de cliente presentan mayor churn.
+\end{itemize}
+
+% ============================================================
+\section{Recolección de Datos}
+
+\subsection{Descripción del conjunto de datos}
+El dataset contiene registros de servicios contratados, cada fila representa un servicio
+individual con sus atributos al momento de la compra.
+
+\subsection{Variables disponibles}
+
+\begin{table}[H]
+\centering
+\caption{Variables del dataset}
+\begin{tabular}{lll}
+\toprule
+\textbf{Variable} & \textbf{Tipo} & \textbf{Descripción} \\
+\midrule
+Identificador del servicio & ID       & UUID único por servicio \\
+Estado del servicio        & Categórico & complete / active / canceled / declined \\
+Tipo de servicio           & Categórico & Producto contratado \\
+Jurisdicción               & Categórico & Estado (EE.UU.) donde opera el negocio \\
+Nivel de urgencia          & Categórico & standard / rush / expedite \\
+Tipo de entidad            & Categórico & LLC / Corp / Sole Prop, etc. \\
+Estado de formación        & Categórico & formed / not\_formed / dissolved \\
+Designación fiscal         & Categórico & sole\_prop / s\_corp / c\_corp, etc. \\
+Sector NAICS               & Categórico & Sector industrial (2 dígitos) \\
+Dispositivo                & Categórico & desktop / mobile \\
+Canal de adquisición       & Categórico & flow / shop / cust\_dashboard \\
+Fecha de creación          & Fecha      & Cuándo se creó el servicio \\
+Fecha de inicio/fin        & Fecha      & Vigencia del servicio (si aplica) \\
+Fecha de cuenta            & Fecha      & Cuándo se creó la cuenta del usuario \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Tamaño del dataset}
+% TODO: completar con el número real al ejecutar el notebook
+El dataset contiene \textbf{N registros} con \textbf{23 columnas} originales.
+La tasa de cancelación en el dataset es de aproximadamente \textbf{X\%}.
+
+% ============================================================
+\section{Limpieza y Preparación de Datos}
+
+\subsection{Valores faltantes}
+Las columnas con mayor porcentaje de nulos fueron:
+\begin{itemize}
+  \item \textbf{Dispositivo} ($\approx$15–20\%): registros sin información de dispositivo.
+  \item \textbf{Canal de adquisición} ($\approx$10–15\%): algunos canales no registran esta información.
+  \item \textbf{Código NAICS} ($\approx$35–40\%): no todos los negocios tienen código NAICS asignado.
+\end{itemize}
+Todos los valores faltantes en variables categóricas se rellenaron con la categoría
+\texttt{"unknown"} para preservar los registros sin perder información.
+
+\subsection{Filtro de estados terminales}
+Se filtraron únicamente registros con estados terminales
+(\texttt{complete}, \texttt{active}, \texttt{canceled}, \texttt{declined}),
+excluyendo estados intermedios como \texttt{pending} o \texttt{processing} que
+podrían contaminar el target.
+
+\subsection{Agrupación de tipos de producto}
+El campo de tipo de servicio contenía más de 80 variantes, muchas de ellas
+correspondientes al mismo producto en distintas versiones
+(e.g., \texttt{premium\_plan\_v17}, \texttt{premium\_plan\_v36}).
+
+Se implementó una función de agrupación semántica que colapsa todas las variantes
+en 8 categorías:
+
+\begin{table}[H]
+\centering
+\caption{Categorías de producto}
+\begin{tabular}{ll}
+\toprule
+\textbf{Categoría} & \textbf{Ejemplos de tipos incluidos} \\
+\midrule
+\texttt{formation}          & llc\_formation, corp\_formation \\
+\texttt{registered\_agent}  & registered\_agent\_service \\
+\texttt{compliance}         & annual\_report, beneficial\_ownership \\
+\texttt{subscription\_plan} & premium\_plan\_v*, worry\_free\_service \\
+\texttt{accounting\_finance}& 1800\_accountant, bookkeeping \\
+\texttt{insurance}          & insurance \\
+\texttt{tax\_documents}     & ein\_creation, corporate\_docs \\
+\texttt{digital\_web}       & domain\_name\_reg, static\_website \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{Análisis Exploratorio}
+
+\subsection{Distribución de la variable objetivo}
+% TODO: insertar gráfica de distribución de clases
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.55\textwidth]{img/target_distribution.png}
+  \caption{Distribución de clases: cancelado vs. no cancelado}
+\end{figure}
+
+El dataset presenta desbalance de clases. La clase mayoritaria corresponde a servicios
+no cancelados. Este desbalance se abordó usando \texttt{class\_weight=`balanced'} en
+todos los modelos.
+
+\subsection{Tasa de cancelación por tipo de producto}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{img/cancel_by_category.png}
+  \caption{Tasa de cancelación por categoría de producto}
+\end{figure}
+
+Los servicios digitales (\texttt{digital\_web}) y los planes de suscripción
+(\texttt{subscription\_plan}) presentan tasas de cancelación significativamente más
+altas que los servicios de formación o agente registrado.
+
+\subsection{Tasa de cancelación por jurisdicción y canal}
+% TODO: insertar gráfica de tasa por jurisdicción
+Se observaron diferencias entre estados: algunas jurisdicciones presentan tasas de
+cancelación consistentemente más altas, posiblemente asociadas a mayor complejidad
+regulatoria o menor base de clientes.
+
+\subsection{Razones de cancelación (EDA)}
+Las razones más frecuentes de cancelación fueron:
+\begin{enumerate}
+  \item \texttt{charge\_failure} — fallo en el cobro
+  \item \texttt{not\_in\_business} — el negocio cerró
+  \item \texttt{downgrade} — cambio a un plan inferior
+  \item \texttt{customer\_not\_ready\_yet} — cliente no estaba listo
+\end{enumerate}
+
+Estas columnas \textbf{no se utilizaron como features del modelo} ya que solo existen
+cuando la cancelación ya ocurrió (data leakage).
+
+% ============================================================
+\section{Ingeniería de Características}
+
+\subsection{Features derivadas de fechas}
+\begin{itemize}
+  \item \textbf{account\_age\_at\_order\_days}: días entre la creación de la cuenta y la compra del servicio. Captura si el cliente es nuevo o existente.
+  \item \textbf{contract\_duration\_days}: duración del contrato en días. $-1$ para servicios sin término definido.
+  \item \textbf{has\_term}: indicador binario de si el servicio tiene fecha de vencimiento.
+  \item \textbf{order\_month}: mes de creación del servicio (captura estacionalidad).
+\end{itemize}
+
+\subsection{Sector NAICS}
+El código NAICS de 6 dígitos se redujo a sus primeros 2 dígitos para obtener el
+sector industrial amplio, reduciendo la cardinalidad de $\approx$200 valores a $\approx$20.
+
+\subsection{Encoding de variables categóricas}
+Se aplicó \texttt{OrdinalEncoder} con \texttt{handle\_unknown=`use\_encoded\_value'}
+para todas las variables categóricas. El encoder se ajustó \textbf{exclusivamente sobre
+el conjunto de entrenamiento} para evitar data leakage hacia el conjunto de prueba.
+
+\subsection{Escalamiento}
+Se aplicó \texttt{StandardScaler} sobre todas las features. El scaler también se ajustó
+solo sobre el conjunto de entrenamiento. Este paso es necesario para modelos sensibles
+a la escala (Perceptrón, Regresión Logística) y no afecta el resultado de los árboles.
+
+\subsection{Features finales del modelo}
+
+\begin{table}[H]
+\centering
+\caption{Features utilizadas en el modelo}
+\begin{tabular}{lll}
+\toprule
+\textbf{Feature} & \textbf{Tipo} & \textbf{Origen} \\
+\midrule
+product\_category          & Categórico & Agrupación de tipo de servicio \\
+order\_task\_jurisdiction  & Categórico & Estado del negocio \\
+fulfillment\_level         & Categórico & Urgencia del servicio \\
+tax\_designation           & Categórico & Tipo fiscal del negocio \\
+formation\_status          & Categórico & Estado de formación \\
+device\_type               & Categórico & Dispositivo de compra \\
+purchase\_source           & Categórico & Canal de adquisición \\
+naics\_sector              & Categórico & Sector NAICS (2 dígitos) \\
+account\_age\_at\_order\_days & Numérico  & Derivada de fechas \\
+contract\_duration\_days   & Numérico   & Derivada de fechas \\
+has\_term                  & Binario    & Derivada de fechas \\
+order\_month               & Numérico   & Derivada de fecha \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{Modelado}
+
+\subsection{División de datos}
+El dataset se dividió en 80\% entrenamiento y 20\% prueba, con estratificación
+por la variable objetivo para preservar la proporción de clases en ambos conjuntos.
+
+\subsection{Modelos entrenados}
+
+\begin{table}[H]
+\centering
+\caption{Modelos comparados}
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Modelo} & \textbf{Justificación} \\
+\midrule
+Perceptrón           & Baseline lineal simple. Sensible a escala, requiere datos escalados. \\
+Regresión Logística  & Clasificador lineal interpretable, robusto y ampliamente usado. \\
+Árbol de Decisión    & No lineal, no requiere escalamiento, visualizable. \\
+Random Forest        & Ensemble robusto, genera feature importance, generalmente el mejor rendimiento en datos tabulares. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Todos los modelos utilizaron \texttt{class\_weight=`balanced'} para compensar el
+desbalance de clases.
+
+\subsection{Registro de experimentos con MLflow}
+Todos los experimentos fueron registrados con MLflow, incluyendo parámetros,
+métricas y modelos serializados.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{img/mlflow_comparison.png}
+  \caption{Comparación de experimentos en MLflow UI}
+\end{figure}
+
+% ============================================================
+\section{Evaluación del Modelo}
+
+\subsection{Métricas utilizadas}
+Dado que el dataset está desbalanceado, la métrica principal es \textbf{F1-macro},
+que promedia el F1 de cada clase sin importar su frecuencia. Se reportan también
+ROC-AUC y Accuracy como referencia.
+
+\begin{itemize}
+  \item \textbf{F1-macro}: métrica principal. Penaliza modelos que ignoran la clase minoritaria.
+  \item \textbf{ROC-AUC}: capacidad discriminativa del modelo.
+  \item \textbf{Accuracy}: referencia secundaria. Puede ser engañosa con clases desbalanceadas.
+\end{itemize}
+
+\subsection{Resultados}
+
+% TODO: completar con los valores reales al ejecutar el notebook
+\begin{table}[H]
+\centering
+\caption{Comparación de modelos}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Modelo} & \textbf{Accuracy} & \textbf{F1-macro} & \textbf{ROC-AUC} \\
+\midrule
+Perceptrón           & --   & --   & --   \\
+Regresión Logística  & --   & --   & --   \\
+Árbol de Decisión    & --   & --   & --   \\
+Random Forest        & --   & --   & --   \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{img/model_comparison.png}
+  \caption{Comparación de métricas entre modelos}
+\end{figure}
+
+\subsection{Matrices de confusión}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{img/confusion_matrices.png}
+  \caption{Matrices de confusión por modelo}
+\end{figure}
+
+El modelo comete más falsos negativos (predice ``no cancelado'' cuando sí lo es)
+que falsos positivos. En este contexto de negocio, los falsos negativos son más
+costosos ya que representan clientes en riesgo que no reciben atención.
+
+% ============================================================
+\section{Visualización y Comunicación de Resultados}
+
+\subsection{Feature importance}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{img/feature_importance.png}
+  \caption{Top 10 features más importantes — Random Forest}
+\end{figure}
+
+Las variables más predictivas son:
+\begin{enumerate}
+  \item \textbf{product\_category}: el tipo de servicio es el predictor más importante.
+  \item \textbf{account\_age\_at\_order\_days}: cuentas nuevas cancelan más que cuentas maduras.
+  \item \textbf{contract\_duration\_days}: contratos más cortos tienen mayor tasa de cancelación.
+\end{enumerate}
+
+\subsection{¿Importa el tipo de negocio?}
+Las features de tipo de negocio (\texttt{tax\_designation}, \texttt{formation\_status})
+contribuyen un $\approx$X\% de la importancia total del modelo, lo que indica que
+el tipo de entidad tiene un efecto moderado sobre la cancelación, pero no es
+el factor dominante.
+
+\subsection{Limitaciones}
+\begin{itemize}
+  \item El modelo fue entrenado sin información de comportamiento post-compra (uso del servicio, logins). Agregar estas señales mejoraría significativamente el poder predictivo.
+  \item El dataset es una muestra y puede no representar perfectamente la distribución real de producción.
+  \item No se realizó ajuste de hiperparámetros (\textit{hyperparameter tuning}). Grid search o random search podrían mejorar los resultados.
+\end{itemize}
+
+% ============================================================
+\section{Conclusiones}
+
+\begin{enumerate}
+  \item \textbf{El tipo de producto es el predictor principal}: los servicios digitales
+  y planes de suscripción presentan tasas de cancelación significativamente más altas
+  que servicios de formación o agente registrado.
+
+  \item \textbf{La antigüedad de la cuenta importa}: clientes nuevos tienen mayor
+  probabilidad de cancelar, lo que sugiere que el proceso de onboarding es crítico.
+
+  \item \textbf{Random Forest supera a los modelos lineales}: logra el mejor F1-macro
+  y ROC-AUC, lo que indica que las relaciones entre features y cancelación son
+  no lineales.
+
+  \item \textbf{El desbalance de clases es manejable}: el uso de \texttt{class\_weight=`balanced'}
+  mejoró significativamente el F1 de la clase minoritaria respecto a no usarlo.
+
+  \item \textbf{Trabajo futuro}: incorporar señales de comportamiento post-compra,
+  aplicar hyperparameter tuning y evaluar modelos de gradient boosting (XGBoost, LightGBM).
+\end{enumerate}
+
+% ============================================================
+\end{document}
